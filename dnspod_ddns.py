@@ -31,6 +31,8 @@ import os
 import socket
 import sys
 import time
+import fcntl
+import struct
 
 try:
     from dnspod.base import BaseAPI
@@ -88,7 +90,10 @@ class App(object):
         last_ip = record.value
         while True:
             try:
-                current_ip = get_ip()
+                #current_ip = get_external_ip()
+                current_ip = get_internal_ip('eth0')
+                if current_ip == '':
+                    current_ip = get_internal_ip('wlan0')
             except socket.error, e:
                 logger.error('Get current IP error: %s', e)
             else:
@@ -103,11 +108,24 @@ class App(object):
                                 int(self._args['-t']))
             time.sleep(int(self._args['-t']))
 
-def get_ip():
+def get_external_ip():
     sock = socket.create_connection(('ns1.dnspod.net', 6666), timeout=30)
     ip = sock.recv(16)
     sock.close()
     return ip
+
+def get_internal_ip(ifname):
+    try:
+        s = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
+        ip = socket.inet_ntoa(fcntl.ioctl(
+            s.fileno(),
+            0x8915,  # SIOCGIFADDR
+            struct.pack('256s', ifname[:15])
+        )[20:24])
+    except IOError:
+        return ""
+    else:
+        return ip    
 
 def main():
     try:
